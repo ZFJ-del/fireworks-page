@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上班快乐烟花</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Microsoft YaHei', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .title {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #ff0080;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.8;
+        }
+
+        .share-btn {
+            position: relative;
+            z-index: 10;
+            background: linear-gradient(45deg, #ff0080, #ff8c00);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.3s;
+        }
+
+        .share-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 文字粒子样式 */
+        .text-particle {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 2;
+            text-shadow: 0 0 10px currentColor;
+        }
+    </style>
+</head>
+<body>
+<div class="title">
+    <h1>🎆 上班快乐烟花 🎆</h1>
+    <p class="subtitle">点击屏幕发射带有祝福文字的烟花</p>
+</div>
+
+<button class="share-btn" onclick="sharePage()">分享给朋友</button>
+
+<canvas id="fireworks"></canvas>
+
+<script>
+    // 获取Canvas上下文
+    const canvas = document.getElementById('fireworks');
+    const ctx = canvas.getContext('2d');
+
+    // 设置Canvas大小为窗口大小
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // 烟花粒子数组
+    const fireworks = [];
+    const particles = [];
+    const textParticles = [];
+
+    // 颜色数组
+    const colors = ['#ff0080', '#ff8c00', '#00ff88', '#0088ff', '#ff00ff', '#ffff00', '#00ffff'];
+
+    // 祝福文字数组 - 轮换显示
+    const blessingTexts = ['上', '班', '快', '乐'];
+    let textIndex = 0;
+
+    // 文字粒子类
+    class TextParticle {
+        constructor(x, y, vx, vy, color, size, text) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.size = size;
+            this.text = text;
+            this.alpha = 1;
+            this.decay = 0.97;
+            this.gravity = 0.1;
+            this.rotation = Math.random() * Math.PI * 2;
+            this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += this.gravity;
+            this.vx *= this.decay;
+            this.vy *= this.decay;
+            this.alpha -= 0.01;
+            this.size *= 0.995;
+            this.rotation += this.rotationSpeed;
+
+            return this.alpha > 0 && this.size > 5;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.font = `bold ${this.size}px Microsoft YaHei`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.fillText(this.text, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    // 烟花类
+    class Firework {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.targetY = Math.random() * canvas.height * 0.3;
+            this.speed = 5;
+            this.color = colors[Math.floor(Math.random() * colors.length)];
+            this.trail = [];
+            this.exploded = false;
+            this.text = blessingTexts[textIndex]; // 获取当前文字
+
+            // 更新文字索引，轮换显示
+            textIndex = (textIndex + 1) % blessingTexts.length;
+        }
+
+        update() {
+            if (!this.exploded) {
+                // 上升阶段
+                this.y -= this.speed;
+                this.trail.push({x: this.x, y: this.y});
+
+                if (this.trail.length > 5) this.trail.shift();
+
+                // 到达目标高度时爆炸
+                if (this.y <= this.targetY) {
+                    this.explode();
+                }
+            }
+        }
+
+        explode() {
+            this.exploded = true;
+            const particleCount = 60 + Math.random() * 30;
+            const textParticleCount = 8; // 文字粒子数量
+
+            // 创建普通粒子
+            for (let i = 0; i < particleCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 4;
+                const size = 1 + Math.random() * 3;
+                const decay = 0.94 + Math.random() * 0.03;
+
+                particles.push(new Particle(
+                    this.x, this.y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    this.color,
+                    size,
+                    decay
+                ));
+            }
+
+            // 创建文字粒子 - 显示"上班快乐"
+            for (let i = 0; i < textParticleCount; i++) {
+                const angle = (i / textParticleCount) * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 2;
+                const size = 20 + Math.random() * 15;
+
+                textParticles.push(new TextParticle(
+                    this.x, this.y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    this.color,
+                    size,
+                    this.text
+                ));
+            }
+
+            // 额外创建一些随机方向的文字粒子
+            for (let i = 0; i < 4; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 3;
+                const size = 25 + Math.random() * 20;
+
+                textParticles.push(new TextParticle(
+                    this.x, this.y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    colors[Math.floor(Math.random() * colors.length)],
+                    size,
+                    blessingTexts[Math.floor(Math.random() * blessingTexts.length)]
+                ));
+            }
+        }
+
+        draw() {
+            if (!this.exploded) {
+                // 绘制烟花尾迹
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                for (let i = 1; i < this.trail.length; i++) {
+                    ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                }
+                ctx.stroke();
+
+                // 绘制烟花头
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // 普通粒子类（保持原有效果）
+    class Particle {
+        constructor(x, y, vx, vy, color, size, decay) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.size = size;
+            this.decay = decay;
+            this.alpha = 1;
+            this.gravity = 0.1;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += this.gravity;
+            this.vx *= this.decay;
+            this.vy *= this.decay;
+            this.alpha -= 0.01;
+            this.size *= 0.99;
+
+            return this.alpha > 0 && this.size > 0.1;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // 动画循环
+    function animate() {
+        // 半透明黑色覆盖，制造拖尾效果
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 随机生成新烟花（自动播放）
+        if (Math.random() < 0.03) {
+            fireworks.push(new Firework(
+                Math.random() * canvas.width,
+                canvas.height
+            ));
+        }
+
+        // 更新和绘制烟花
+        for (let i = fireworks.length - 1; i >= 0; i--) {
+            fireworks[i].update();
+            fireworks[i].draw();
+
+            if (fireworks[i].exploded) {
+                fireworks.splice(i, 1);
+            }
+        }
+
+        // 更新和绘制普通粒子
+        for (let i = particles.length - 1; i >= 0; i--) {
+            if (!particles[i].update()) {
+                particles.splice(i, 1);
+            } else {
+                particles[i].draw();
+            }
+        }
+
+        // 更新和绘制文字粒子
+        for (let i = textParticles.length - 1; i >= 0; i--) {
+            if (!textParticles[i].update()) {
+                textParticles.splice(i, 1);
+            } else {
+                textParticles[i].draw();
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    // 点击发射烟花（增强版）
+    canvas.addEventListener('click', function(e) {
+        // 发射3个烟花，每个显示不同的文字
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                fireworks.push(new Firework(
+                    e.clientX + (Math.random() - 0.5) * 100,
+                    canvas.height
+                ));
+            }, i * 200);
+        }
+    });
+
+    // 触摸支持（移动端）
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => {
+                fireworks.push(new Firework(
+                    touch.clientX + (Math.random() - 0.5) * 100,
+                    canvas.height
+                ));
+            }, i * 200);
+        }
+    });
+
+    // 键盘支持（按空格键发射）
+    document.addEventListener('keydown', function(e) {
+        if (e.code === 'Space') {
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    fireworks.push(new Firework(
+                        Math.random() * canvas.width,
+                        canvas.height
+                    ));
+                }, i * 200);
+            }
+        }
+    });
+
+    // 分享功能
+    function sharePage() {
+        if (navigator.share) {
+            navigator.share({
+                title: '上班快乐烟花秀',
+                text: '点击观看带有"上班快乐"祝福的炫酷烟花效果！',
+                url: window.location.href
+            });
+        } else {
+            // 复制链接
+            navigator.clipboard.writeText(window.location.href);
+            alert('链接已复制，可以分享给朋友了！\n祝福语：上班快乐！');
+        }
+    }
+
+    // 响应窗口大小变化
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+
+    // 开始动画
+    animate();
+
+    // 添加一些初始烟花展示
+    for (let i = 0; i < 8; i++) {
+        setTimeout(() => {
+            fireworks.push(new Firework(
+                Math.random() * canvas.width,
+                canvas.height
+            ));
+        }, i * 800);
+    }
+
+    // 添加说明文字
+    console.log('🎆 上班快乐烟花已加载！');
+    console.log('💡 操作提示：');
+    console.log('   - 点击屏幕发射烟花');
+    console.log('   - 按空格键随机发射');
+    console.log('   - 自动播放中...');
+</script>
+</body>
+</html>
