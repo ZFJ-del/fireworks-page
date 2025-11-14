@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>毕业快乐抽奖</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            text-align: center;
+        }
+
+        header {
+            margin: 20px 0 40px;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .counter {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 10px 20px;
+            display: inline-block;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            backdrop-filter: blur(5px);
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .options-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .options-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .option {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 20px 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .option:hover:not(.selected):not(.disabled) {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .option.selected {
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            color: #333;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.7);
+            font-weight: bold;
+        }
+
+        .option.disabled {
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.4);
+            cursor: not-allowed;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+        }
+
+        .option.disabled::after {
+            content: "已选";
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 5px;
+            border-radius: 10px;
+        }
+
+        .draw-button {
+            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            padding: 15px 50px;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+        }
+
+        .draw-button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .draw-button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .draw-button:disabled {
+            background: linear-gradient(to right, #cccccc, #aaaaaa);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .result {
+            font-size: 1.8rem;
+            margin: 20px 0;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 20px;
+            background: #f00;
+            top: 0;
+            opacity: 0;
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                top: -100px;
+                opacity: 1;
+            }
+            100% {
+                top: 100vh;
+                opacity: 0;
+            }
+        }
+
+        .message {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .graduate-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .history {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history h3 {
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .history-list {
+            list-style-type: none;
+            text-align: left;
+        }
+
+        .history-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="graduate-icon">🎓</div>
+        <h1>毕业快乐</h1>
+        <p class="subtitle">点击下方按钮抽取你的毕业礼物</p>
+        <div class="counter">
+            已抽取: <span id="selectedCount">0</span>/12
+        </div>
+    </header>
+
+    <div class="options-grid" id="optionsGrid">
+        <!-- 选项将通过JavaScript动态生成 -->
+    </div>
+
+    <button class="draw-button" id="drawButton">点击抽取</button>
+
+    <div class="result" id="result"></div>
+
+    <div class="message" id="message">
+        恭喜你！愿你前程似锦，未来可期！
+    </div>
+
+    <div class="history">
+        <h3>抽奖记录</h3>
+        <ul class="history-list" id="historyList">
+            <!-- 抽奖记录将通过JavaScript动态生成 -->
+        </ul>
+    </div>
+</div>
+
+<div class="celebration" id="celebration"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 选项数据
+        const options = [
+            "精品土鸡蛋捏捏",
+            "慵懒鸡",
+            "毕业旅行券",
+            "精品土鸡蛋捏捏",
+            "认真鸡",
+            "导师推荐信",
+            "精品土鸡蛋捏捏",
+            "两座孤岛",
+            "地球撞月亮",
+            "毕业摄影套餐",
+            "做饭的意外之喜",
+            "睡觉鸡"
+        ];
+
+        const optionsGrid = document.getElementById('optionsGrid');
+        const drawButton = document.getElementById('drawButton');
+        const result = document.getElementById('result');
+        const celebration = document.getElementById('celebration');
+        const message = document.getElementById('message');
+        const selectedCount = document.getElementById('selectedCount');
+        const historyList = document.getElementById('historyList');
+
+        let selectedOptions = []; // 已选中的选项索引
+        let availableOptions = [...options.keys()]; // 可用选项索引
+        let drawCount = 0; // 已抽取次数
+
+        // 生成选项
+        options.forEach((option, index) => {
+            const optionElement = document.createElement('div');
+            optionElement.className = 'option';
+            optionElement.textContent = option;
+            optionElement.dataset.index = index;
+            optionsGrid.appendChild(optionElement);
+        });
+
+        // 更新计数显示
+        function updateCounter() {
+            selectedCount.textContent = drawCount;
+        }
+
+        // 添加抽奖记录
+        function addHistory(optionText) {
+            const historyItem = document.createElement('li');
+            historyItem.className = 'history-item';
+            historyItem.textContent = `第${drawCount}次: ${optionText}`;
+            historyList.prepend(historyItem);
+        }
+
+        // 抽奖功能
+        drawButton.addEventListener('click', function() {
+            if (availableOptions.length === 0) {
+                result.textContent = "所有选项都已抽取完毕！";
+                return;
+            }
+
+            // 随机选择
+            const randomIndex = Math.floor(Math.random() * availableOptions.length);
+            const selectedIndex = availableOptions[randomIndex];
+
+            // 更新数据
+            selectedOptions.push(selectedIndex);
+            availableOptions.splice(randomIndex, 1);
+            drawCount++;
+
+            // 更新UI
+            document.querySelectorAll('.option')[selectedIndex].classList.add('selected', 'disabled');
+            result.textContent = `恭喜你获得：${options[selectedIndex]}`;
+
+            // 更新计数
+            updateCounter();
+
+            // 添加历史记录
+            addHistory(options[selectedIndex]);
+
+            // 显示庆祝消息
+            message.style.display = 'block';
+
+            // 触发庆祝特效
+            createCelebration();
+
+            // 检查是否已抽取完所有选项
+            if (drawCount >= 12) {
+                drawButton.disabled = true;
+                drawButton.textContent = "已全部抽取";
+                result.textContent = "恭喜你！所有选项都已抽取完毕！";
+            }
+        });
+
+        // 创建庆祝特效
+        function createCelebration() {
+            celebration.style.display = 'block';
+            celebration.innerHTML = '';
+
+            // 创建五彩纸屑
+            for (let i = 0; i < 200; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+
+                // 随机颜色
+                const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+
+                // 随机位置和动画
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.animation = `confetti-fall ${Math.random() * 3 + 2}s linear forwards`;
+                confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+
+                celebration.appendChild(confetti);
+            }
+
+            // 3秒后隐藏庆祝特效
+            setTimeout(() => {
+                celebration.style.display = 'none';
+            }, 6000);
+        }
+
+        // 初始化计数显示
+        updateCounter();
+    });
+</script>
+</body>
+</html>
