@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上班快乐烟花</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Microsoft YaHei', sans-serif;
+            height: 100vh;
+            color: white;
+            touch-action: manipulation;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .title {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #ff0080;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.8;
+        }
+
+        /* 性能监控面板 */
+        .performance-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #00ff00;
+        }
+
+        /* 分享按钮 - 右上角 */
+        .share-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: linear-gradient(45deg, #ff0080, #ff8c00);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1em;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 10px rgba(255, 0, 128, 0.3);
+        }
+
+        .share-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(255, 0, 128, 0.5);
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .share-btn {
+                top: 15px;
+                right: 15px;
+                padding: 8px 16px;
+                font-size: 0.9em;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            .subtitle {
+                font-size: 1em;
+            }
+
+            .performance-panel {
+                display: none; /* 移动端隐藏性能面板 */
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="title">
+    <h1>🎆 上班快乐烟花 🎆</h1>
+    <p class="subtitle">点击屏幕发射带有祝福文字的烟花</p>
+</div>
+
+<!-- 性能监控面板 -->
+<div class="performance-panel" id="performancePanel">
+    <div>粒子数: <span id="particleCount">0</span></div>
+    <div>FPS: <span id="fps">0</span></div>
+    <div>状态: <span id="performanceStatus">良好</span></div>
+</div>
+
+<!-- 分享按钮 -->
+<button class="share-btn" onclick="sharePage()">分享</button>
+
+<canvas id="fireworks"></canvas>
+
+<script>
+    // 性能优化配置
+    const PERFORMANCE_CONFIG = {
+        MAX_PARTICLES: 800,           // 最大粒子数限制
+        MAX_FIREWORKS: 20,             // 最大同时存在的烟花数
+        AUTO_FIRE_RATE: 0.015,        // 自动发射频率（降低频率）
+        PARTICLE_COUNT: 30,           // 每个烟花的粒子数（减少）
+        TEXT_PARTICLE_COUNT: 6,       // 文字粒子数
+        TRAIL_LENGTH: 3,              // 尾迹长度
+        FPS_LIMIT: 60,                // 帧率限制
+        PERFORMANCE_MODE: false       // 性能模式开关
+    };
+
+    // 获取Canvas上下文
+    const canvas = document.getElementById('fireworks');
+    const ctx = canvas.getContext('2d');
+
+    // 设置Canvas大小为窗口大小
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // 性能监控变量
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let fps = 0;
+
+    // 烟花粒子数组
+    const fireworks = [];
+    const particles = [];
+    const textParticles = [];
+
+    // 颜色数组
+    const colors = ['#ff0080', '#ff8c00', '#00ff88', '#0088ff', '#ff00ff', '#ffff00', '#00ffff'];
+
+    // 祝福文字数组
+    const blessingTexts = ['上', '班', '快', '乐'];
+
+    // 文字粒子类 - 优化版本
+    class TextParticle {
+        constructor(x, y, vx, vy, color, size, text) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.originalSize = size;
+            this.size = size;
+            this.text = text;
+            this.alpha = 1;
+            this.decay = 0.96; // 减慢衰减
+            this.gravity = 0.06; // 减小重力
+            this.rotation = Math.random() * Math.PI * 2;
+            this.rotationSpeed = (Math.random() - 0.5) * 0.06;
+            this.life = 120; // 延长生命周期
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += this.gravity;
+            this.vx *= this.decay;
+            this.vy *= this.decay;
+            this.life -= 1;
+            this.alpha = Math.max(0, this.life / 120);
+            this.size = this.originalSize * (this.life / 120);
+            this.rotation += this.rotationSpeed;
+
+            return this.life > 0;
+        }
+
+        draw() {
+            if (this.alpha <= 0) return;
+
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.font = `bold ${Math.max(8, this.size)}px Microsoft YaHei`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+
+            // 添加发光效果
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 8;
+            ctx.fillText(this.text, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    // 烟花类 - 性能优化版本
+    class Firework {
+        constructor(x, y, targetText = null) {
+            this.x = x;
+            this.y = y;
+            this.targetY = Math.random() * canvas.height * 0.4;
+            this.speed = 4 + Math.random() * 2; // 稍微变化的速度
+            this.color = colors[Math.floor(Math.random() * colors.length)];
+            this.trail = [];
+            this.exploded = false;
+            this.text = targetText || blessingTexts[Math.floor(Math.random() * blessingTexts.length)];
+        }
+
+        update() {
+            if (!this.exploded) {
+                this.y -= this.speed;
+
+                // 优化尾迹 - 减少点数量
+                this.trail.push({x: this.x, y: this.y});
+                if (this.trail.length > PERFORMANCE_CONFIG.TRAIL_LENGTH) {
+                    this.trail.shift();
+                }
+
+                if (this.y <= this.targetY) {
+                    this.explode();
+                }
+            }
+        }
+
+        explode() {
+            this.exploded = true;
+
+            // 检查粒子数量限制
+            if (particles.length + PERFORMANCE_CONFIG.PARTICLE_COUNT > PERFORMANCE_CONFIG.MAX_PARTICLES) {
+                return; // 粒子过多，不爆炸
+            }
+
+            // 创建普通粒子 - 减少数量
+            for (let i = 0; i < PERFORMANCE_CONFIG.PARTICLE_COUNT; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 2;
+                const size = 0.5 + Math.random() * 1.5;
+                const decay = 0.92 + Math.random() * 0.04;
+
+                particles.push(new Particle(
+                    this.x, this.y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    this.color,
+                    size,
+                    decay
+                ));
+            }
+
+            // 创建文字粒子
+            for (let i = 0; i < PERFORMANCE_CONFIG.TEXT_PARTICLE_COUNT; i++) {
+                const angle = (i / PERFORMANCE_CONFIG.TEXT_PARTICLE_COUNT) * Math.PI * 2;
+                const speed = 0.8 + Math.random() * 1.2;
+                const size = 20 + Math.random() * 10;
+
+                textParticles.push(new TextParticle(
+                    this.x, this.y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    this.color,
+                    size,
+                    this.text
+                ));
+            }
+        }
+
+        draw() {
+            if (!this.exploded && this.trail.length > 1) {
+                // 绘制烟花尾迹 - 优化绘制性能
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                for (let i = 1; i < this.trail.length; i++) {
+                    ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                }
+                ctx.stroke();
+
+                // 绘制烟花头
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // 普通粒子类 - 优化版本
+    class Particle {
+        constructor(x, y, vx, vy, color, size, decay) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.size = size;
+            this.decay = decay;
+            this.alpha = 1;
+            this.gravity = 0.08;
+            this.life = 100;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += this.gravity;
+            this.vx *= this.decay;
+            this.vy *= this.decay;
+            this.life -= 2; // 加快消失
+            this.alpha = Math.max(0, this.life / 100);
+            this.size *= 0.98;
+
+            return this.life > 0 && this.alpha > 0;
+        }
+
+        draw() {
+            if (this.alpha <= 0) return;
+
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // 性能监控函数
+    function updatePerformanceMonitor() {
+        frameCount++;
+        const currentTime = performance.now();
+        if (currentTime - lastTime >= 1000) {
+            fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+            frameCount = 0;
+            lastTime = currentTime;
+
+            // 更新性能面板
+            document.getElementById('particleCount').textContent =
+                particles.length + textParticles.length;
+            document.getElementById('fps').textContent = fps;
+
+            // 性能状态提示
+            const totalParticles = particles.length + textParticles.length;
+            let status = '良好';
+            let color = '#00ff00';
+
+            if (fps < 30) {
+                status = '卡顿';
+                color = '#ff0000';
+            } else if (fps < 50) {
+                status = '一般';
+                color = '#ffff00';
+            }
+
+            if (totalParticles > PERFORMANCE_CONFIG.MAX_PARTICLES * 0.8) {
+                status = '粒子过多';
+                color = '#ff0000';
+            }
+
+            document.getElementById('performanceStatus').textContent = status;
+            document.getElementById('performanceStatus').style.color = color;
+        }
+    }
+
+    // 粒子数量控制函数
+    function manageParticleCount() {
+        // 如果粒子过多，清理最老的部分粒子
+        const maxParticles = PERFORMANCE_CONFIG.MAX_PARTICLES;
+        const totalParticles = particles.length + textParticles.length;
+
+        if (totalParticles > maxParticles) {
+            // 清理普通粒子
+            const particlesToRemove = Math.min(particles.length, totalParticles - maxParticles * 0.7);
+            particles.splice(0, particlesToRemove);
+
+            // 清理文字粒子
+            const textParticlesToRemove = Math.min(textParticles.length, totalParticles - maxParticles * 0.7);
+            textParticles.splice(0, textParticlesToRemove);
+        }
+    }
+
+    // 优化后的动画循环
+    function animate(currentTime) {
+        // 性能监控
+        updatePerformanceMonitor();
+
+        // 粒子数量控制
+        manageParticleCount();
+
+        // 使用更高效的清屏方式
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // 增加透明度，减少拖尾
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 控制自动发射频率 - 根据性能动态调整
+        let autoFireRate = PERFORMANCE_CONFIG.AUTO_FIRE_RATE;
+        if (fps < 40) autoFireRate *= 0.5;
+        if (fps < 25) autoFireRate = 0; // 严重卡顿时停止自动发射
+
+        // 随机生成新烟花（带性能检查）
+        if (Math.random() < autoFireRate && fireworks.length < PERFORMANCE_CONFIG.MAX_FIREWORKS) {
+            const textIndex = Math.floor(Math.random() * blessingTexts.length);
+            fireworks.push(new Firework(
+                Math.random() * canvas.width,
+                canvas.height,
+                blessingTexts[textIndex]
+            ));
+        }
+
+        // 批量更新和绘制 - 减少函数调用
+        updateAndDrawFireworks();
+        updateAndDrawParticles();
+        updateAndDrawTextParticles();
+
+        requestAnimationFrame(animate);
+    }
+
+    // 批量更新烟花
+    function updateAndDrawFireworks() {
+        for (let i = fireworks.length - 1; i >= 0; i--) {
+            fireworks[i].update();
+            fireworks[i].draw();
+
+            if (fireworks[i].exploded) {
+                fireworks.splice(i, 1);
+            }
+        }
+    }
+
+    // 批量更新普通粒子
+    function updateAndDrawParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            if (!particles[i].update()) {
+                particles.splice(i, 1);
+            } else {
+                particles[i].draw();
+            }
+        }
+    }
+
+    // 批量更新文字粒子
+    function updateAndDrawTextParticles() {
+        for (let i = textParticles.length - 1; i >= 0; i--) {
+            if (!textParticles[i].update()) {
+                textParticles.splice(i, 1);
+            } else {
+                textParticles[i].draw();
+            }
+        }
+    }
+
+    // 优化点击事件 - 防抖和性能检查
+    let lastClickTime = 0;
+    const CLICK_COOLDOWN = 500; // 500毫秒冷却
+
+    canvas.addEventListener('click', function(e) {
+        const currentTime = Date.now();
+        if (currentTime - lastClickTime < CLICK_COOLDOWN) return;
+        lastClickTime = currentTime;
+
+        // 性能检查：如果粒子过多，减少发射数量
+        const totalParticles = particles.length + textParticles.length;
+        const fireworkCount = totalParticles > PERFORMANCE_CONFIG.MAX_PARTICLES * 0.5 ? 2 : 4;
+
+        for (let i = 0; i < fireworkCount; i++) {
+            setTimeout(() => {
+                if (fireworks.length < PERFORMANCE_CONFIG.MAX_FIREWORKS) {
+                    fireworks.push(new Firework(
+                        e.clientX + (Math.random() - 0.5) * 200,
+                        canvas.height,
+                        blessingTexts[i % blessingTexts.length]
+                    ));
+                }
+            }, i * 400);
+        }
+    });
+
+    // 触摸支持（带性能检查）
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const currentTime = Date.now();
+
+        if (currentTime - lastClickTime < CLICK_COOLDOWN) return;
+        lastClickTime = currentTime;
+
+        const totalParticles = particles.length + textParticles.length;
+        const fireworkCount = totalParticles > PERFORMANCE_CONFIG.MAX_PARTICLES * 0.5 ? 2 : 3;
+
+        for (let i = 0; i < fireworkCount; i++) {
+            setTimeout(() => {
+                if (fireworks.length < PERFORMANCE_CONFIG.MAX_FIREWORKS) {
+                    fireworks.push(new Firework(
+                        touch.clientX + (Math.random() - 0.5) * 150,
+                        canvas.height,
+                        blessingTexts[i % blessingTexts.length]
+                    ));
+                }
+            }, i * 400);
+        }
+    });
+
+    // 键盘支持
+    document.addEventListener('keydown', function(e) {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            const totalParticles = particles.length + textParticles.length;
+            const fireworkCount = totalParticles > PERFORMANCE_CONFIG.MAX_PARTICLES * 0.6 ? 1 : 2;
+
+            for (let i = 0; i < fireworkCount; i++) {
+                setTimeout(() => {
+                    if (fireworks.length < PERFORMANCE_CONFIG.MAX_FIREWORKS) {
+                        fireworks.push(new Firework(
+                            Math.random() * canvas.width,
+                            canvas.height,
+                            blessingTexts[Math.floor(Math.random() * blessingTexts.length)]
+                        ));
+                    }
+                }, i * 500);
+            }
+        }
+    });
+
+    // 分享功能
+    function sharePage() {
+        if (navigator.share) {
+            navigator.share({
+                title: '高性能上班快乐烟花秀',
+                text: '点击观看流畅的"上班快乐"烟花效果！',
+                url: window.location.href
+            });
+        } else {
+            navigator.clipboard.writeText(window.location.href);
+            alert('链接已复制，可以分享给朋友了！\n优化版：流畅不卡顿！');
+        }
+    }
+
+    // 响应窗口大小变化
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+
+    // 开始动画
+    animate();
+
+    // 添加性能提示
+    console.log('🎆 高性能上班快乐烟花已加载！');
+    console.log('💡 性能优化特性：');
+    console.log('   - 粒子数量限制：' + PERFORMANCE_CONFIG.MAX_PARTICLES);
+    console.log('   - 自动性能调节');
+    console.log('   - 点击防抖保护');
+    console.log('   - 动态发射频率');
+</script>
+</body>
+</html>
