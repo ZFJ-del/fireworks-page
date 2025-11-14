@@ -236,6 +236,107 @@
         .history-item:last-child {
             border-bottom: none;
         }
+
+        /* 浮窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .modal {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            position: relative;
+        }
+
+        .modal h2 {
+            color: #ffd700;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .modal-content {
+            margin: 20px 0;
+        }
+
+        .prize-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border: 3px solid #ffd700;
+        }
+
+        .upload-section {
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .upload-label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .upload-input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+
+        .upload-button {
+            background: #ffd700;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .upload-button:hover {
+            background: #ffed4e;
+            transform: translateY(-2px);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .prize-info {
+            font-size: 1.2rem;
+            margin: 15px 0;
+        }
+
+        .image-preview {
+            display: flex;
+            justify-content: center;
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
@@ -269,24 +370,39 @@
     </div>
 </div>
 
+<!-- 中奖浮窗 -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <button class="close-modal" id="closeModal">×</button>
+        <h2>恭喜中奖！</h2>
+        <h2>感谢你来参加我的毕业典礼!!</h2>
+        <div class="modal-content">
+            <div class="prize-info" id="prizeInfo"></div>
+            <div class="image-preview">
+                <img id="prizeImage" class="prize-image" src="" alt="奖品图片">
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="celebration" id="celebration"></div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // 选项数据
         const options = [
-            "精品土鸡蛋捏捏",
-            "慵懒鸡",
+            "毕业纪念册",
+            "定制学士帽",
             "毕业旅行券",
-            "精品土鸡蛋捏捏",
-            "认真鸡",
+            "专业书籍",
+            "实习机会",
             "导师推荐信",
-            "精品土鸡蛋捏捏",
-            "两座孤岛",
-            "地球撞月亮",
+            "校友会会员",
+            "职业规划咨询",
+            "技能培训课程",
             "毕业摄影套餐",
-            "做饭的意外之喜",
-            "睡觉鸡"
+            "定制纪念戒指",
+            "未来规划指南"
         ];
 
         const optionsGrid = document.getElementById('optionsGrid');
@@ -296,10 +412,17 @@
         const message = document.getElementById('message');
         const selectedCount = document.getElementById('selectedCount');
         const historyList = document.getElementById('historyList');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const closeModal = document.getElementById('closeModal');
+        const prizeInfo = document.getElementById('prizeInfo');
+        const prizeImage = document.getElementById('prizeImage');
+        const imageUpload = document.getElementById('imageUpload');
+        const uploadButton = document.getElementById('uploadButton');
 
         let selectedOptions = []; // 已选中的选项索引
         let availableOptions = [...options.keys()]; // 可用选项索引
         let drawCount = 0; // 已抽取次数
+        let currentPrizeIndex = -1; // 当前奖品索引
 
         // 生成选项
         options.forEach((option, index) => {
@@ -323,6 +446,24 @@
             historyList.prepend(historyItem);
         }
 
+        // 显示中奖浮窗
+        function showPrizeModal(prizeIndex, prizeName) {
+            currentPrizeIndex = prizeIndex;
+            prizeInfo.textContent = `恭喜您获得了: ${prizeName}`;
+            modalOverlay.style.display = 'flex';
+
+            // 加载对应图片 (索引从0开始，图片从1开始)
+            const imagePath = `./photo/${prizeIndex + 1}.jpg`;
+            prizeImage.src = imagePath;
+            prizeImage.alt = prizeName;
+
+            // 如果图片加载失败，显示占位图
+            prizeImage.onerror = function() {
+                prizeImage.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zNWVtIj7lm77niYfkuIrlj7A8L3RleHQ+PC9zdmc+';
+                console.log(`图片加载失败: ${imagePath}`);
+            };
+        }
+
         // 抽奖功能
         drawButton.addEventListener('click', function() {
             if (availableOptions.length === 0) {
@@ -333,6 +474,7 @@
             // 随机选择
             const randomIndex = Math.floor(Math.random() * availableOptions.length);
             const selectedIndex = availableOptions[randomIndex];
+            const selectedPrize = options[selectedIndex];
 
             // 更新数据
             selectedOptions.push(selectedIndex);
@@ -341,19 +483,24 @@
 
             // 更新UI
             document.querySelectorAll('.option')[selectedIndex].classList.add('selected', 'disabled');
-            result.textContent = `恭喜你获得：${options[selectedIndex]}`;
+            result.textContent = `恭喜你获得：${selectedPrize}`;
 
             // 更新计数
             updateCounter();
 
             // 添加历史记录
-            addHistory(options[selectedIndex]);
+            addHistory(selectedPrize);
 
             // 显示庆祝消息
             message.style.display = 'block';
 
             // 触发庆祝特效
             createCelebration();
+
+            // 显示中奖浮窗
+            setTimeout(() => {
+                showPrizeModal(selectedIndex, selectedPrize);
+            }, 1500);
 
             // 检查是否已抽取完所有选项
             if (drawCount >= 12) {
@@ -363,13 +510,26 @@
             }
         });
 
+        // 关闭浮窗
+        closeModal.addEventListener('click', function() {
+            modalOverlay.style.display = 'none';
+        });
+
+        // 点击浮窗外部关闭
+        modalOverlay.addEventListener('click', function(e) {
+            if (e.target === modalOverlay) {
+                modalOverlay.style.display = 'none';
+            }
+        });
+
+
         // 创建庆祝特效
         function createCelebration() {
             celebration.style.display = 'block';
             celebration.innerHTML = '';
 
             // 创建五彩纸屑
-            for (let i = 0; i < 200; i++) {
+            for (let i = 0; i < 150; i++) {
                 const confetti = document.createElement('div');
                 confetti.className = 'confetti';
 
