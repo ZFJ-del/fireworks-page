@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>霓虹死寂 - 僵尸生存</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none; /* 禁止选中文本 */
+        }
+        canvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 让点击穿透UI层 */
+        }
+        .hud {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        #score-box {
+            top: 20px;
+            right: 30px;
+            font-size: 30px;
+            color: #00ffcc;
+            text-shadow: 0 0 20px #00ffcc;
+        }
+        #health-bar-container {
+            top: 20px;
+            left: 30px;
+            width: 250px;
+            height: 15px;
+            background: rgba(50, 50, 50, 0.5);
+            border: 2px solid #444;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff3333, #ff6666);
+            box-shadow: 0 0 15px #ff3333;
+            transition: width 0.2s;
+        }
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: auto;
+            background: rgba(10, 10, 20, 0.9);
+            padding: 40px;
+            border: 1px solid #333;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(0, 255, 204, 0.2);
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            color: #ff3333;
+            font-size: 50px;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 0 0 30px #ff3333;
+        }
+        p {
+            color: #ccc;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        button {
+            background: transparent;
+            color: #00ffcc;
+            border: 2px solid #00ffcc;
+            padding: 15px 40px;
+            font-size: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.3);
+        }
+        button:hover {
+            background: #00ffcc;
+            color: #000;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.8);
+        }
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        .key {
+            display: inline-block;
+            padding: 5px 10px;
+            border: 1px solid #666;
+            border-radius: 5px;
+            color: #fff;
+            margin: 0 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div id="health-bar-container">
+            <div id="health-bar"></div>
+        </div>
+        <div id="score-box" class="hud">SCORE: 0</div>
+
+        <!-- 游戏结束界面 -->
+        <div id="game-over">
+            <h1>行动失败</h1>
+            <p>最终得分: <span id="final-score">0</span></p>
+            <button onclick="restartGame()">重新部署</button>
+        </div>
+        
+        <!-- 开始界面 -->
+        <div id="start-screen">
+            <h1 style="color: #00ffcc; text-shadow: 0 0 30px #00ffcc;">霓虹死寂</h1>
+            <p style="margin-bottom:40px;">
+                移动: <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 
+                &nbsp;&nbsp; 射击: <span class="key">鼠标左键</span>
+            </p>
+            <button onclick="startGame()">开始战斗</button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score-box');
+    const hpBar = document.getElementById('health-bar');
+    const gameOverScreen = document.getElementById('game-over');
+    const startScreen = document.getElementById('start-screen');
+    const finalScoreEl = document.getElementById('final-score');
+
+    // 游戏状态
+    let gameState = "MENU"; // MENU, PLAYING, GAMEOVER
+    let width, height;
+    let mouse = { x: 0, y: 0, down: false };
+    let score = 0;
+    let frames = 0;
+    
+    // 摄像机震动
+    let camera = { x: 0, y: 0, shake: 0 };
+
+    // 输入
+    const keys = { w: false, a: false, s: false, d: false };
+
+    // 实体数组
+    let player;
+    let bullets = [];
+    let zombies = [];
+    let particles = [];
+
+    // 初始化画布尺寸
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- 类定义 ---
+
+    class Player {
+        constructor() {
+            this.x = width / 2;
+            this.y = height / 2;
+            this.radius = 15;
+            this.color = '#00ccff';
+            this.speed = 4;
+            this.hp = 100;
+            this.maxHp = 100;
+            this.lastShot = 0;
+            this.angle = 0;
+        }
+
+        update() {
+            // 移动
+            if (keys.w && this.y > this.radius) this.y -= this.speed;
+            if (keys.s && this.y < height - this.radius) this.y += this.speed;
+            if (keys.a && this.x > this.radius) this.x -= this.speed;
+            if (keys.d && this.x < width - this.radius) this.x += this.speed;
+
+            // 瞄准角度
+            const dx = mouse.x - this.x;
+            const dy = mouse.y - this.y;
+            this.angle = Math.atan2(dy, dx);
+
+            // 射击
+            if (mouse.down && Date.now() - this.lastShot > 100) { // 100ms 射速
+                bullets.push(new Bullet(this.x, this.y, this.angle));
+                this.lastShot = Date.now();
+                camera.shake = 2; // 后坐力震动
+                
+                // 枪口火焰粒子
+                const gunX = this.x + Math.cos(this.angle) * 25;
+                const gunY = this.y + Math.sin(this.angle) * 25;
+                for(let i=0; i<3; i++) {
+                    particles.push(new Particle(gunX, gunY, 2, '#ffff00', 10));
+                }
+            }
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+
+            // 发光效果
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+
+            // 身体
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            
+            // 枪
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, -5, 30, 10);
+
+            ctx.restore();
+        }
+    }
+
+    class Zombie {
+        constructor() {
+            // 随机边缘生成
+            const edge = Math.floor(Math.random() * 4);
+            if (edge === 0) { this.x = Math.random() * width; this.y = -50; } // Top
+            if (edge === 1) { this.x = Math.random() * width; this.y = height + 50; } // Bottom
+            if (edge === 2) { this.x = -50; this.y = Math.random() * height; } // Left
+            if (edge === 3) { this.x = width + 50; this.y = Math.random() * height; } // Right
+
+            this.radius = 16 + Math.random() * 8;
+            this.speed = 1 + Math.random() * 1.5 + (score / 2000); // 难度随分数增加
+            this.color = '#55ff55';
+            this.hp = 2 + Math.floor(score / 500);
+        }
+
+        update() {
+            const angle = Math.atan2(player.y - this.y, player.x - this.x);
+            this.x += Math.cos(angle) * this.speed;
+            this.y += Math.sin(angle) * this.speed;
+
+            // 碰撞玩家
+            const dist = Math.hypot(player.x - this.x, player.y - this.y);
+            if (dist - this.radius - player.radius < 0) {
+                player.hp -= 10;
+                hpBar.style.width = `${(player.hp / player.maxHp) * 100}%`;
+                camera.shake = 15; // 受伤剧烈震动
+                
+                // 简单的击退
+                this.x -= Math.cos(angle) * 20;
+                this.y -= Math.sin(angle) * 20;
+
+                // 玩家受伤红色粒子
+                for(let i=0; i<10; i++) {
+                    particles.push(new Particle(player.x, player.y, 3, '#ff0000', 30));
+                }
+
+                if (player.hp <= 0) endGame();
+            }
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = this.color;
+
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+
+            // 眼睛
+            ctx.fillStyle = '#000';
+            const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
+            const eyeX = Math.cos(angleToPlayer) * 5;
+            const eyeY = Math.sin(angleToPlayer) * 5;
+            ctx.beginPath();
+            ctx.arc(eyeX - 4, eyeY - 4, 3, 0, Math.PI*2);
+            ctx.arc(eyeX + 4, eyeY + 4, 3, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+    }
+
+    class Bullet {
+        constructor(x, y, angle) {
+            this.x = x;
+            this.y = y;
+            this.velocity = {
+                x: Math.cos(angle) * 15,
+                y: Math.sin(angle) * 15
+            };
+            this.radius = 4;
+        }
+
+        update() {
+            this.x += this.velocity.x;
+            this.y += this.velocity.y;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffff00';
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    class Particle {
+        constructor(x, y, radius, color, speedMultiplier) {
+            this.x = x;
+            this.y = y;
+            this.radius = Math.random() * radius;
+            this.color = color;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * speedMultiplier;
+            this.velocity = {
+                x: Math.cos(angle) * speed,
+                y: Math.sin(angle) * speed
+            };
+            this.alpha = 1;
+            this.decay = 0.02 + Math.random() * 0.03;
+        }
+
+        update() {
+            this.velocity.x *= 0.95; // 摩擦力
+            this.velocity.y *= 0.95;
+            this.x += this.velocity.x;
+            this.y += this.velocity.y;
+            this.alpha -= this.decay;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // --- 核心逻辑 ---
+
+    function init() {
+        // 事件监听
+        window.addEventListener('mousemove', e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+        window.addEventListener('mousedown', () => mouse.down = true);
+        window.addEventListener('mouseup', () => mouse.down = false);
+        
+        window.addEventListener('keydown', e => {
+            if (e.key.toLowerCase() === 'w') keys.w = true;
+            if (e.key.toLowerCase() === 'a') keys.a = true;
+            if (e.key.toLowerCase() === 's') keys.s = true;
+            if (e.key.toLowerCase() === 'd') keys.d = true;
+        });
+        
+        window.addEventListener('keyup', e => {
+            if (e.key.toLowerCase() === 'w') keys.w = false;
+            if (e.key.toLowerCase() === 'a') keys.a = false;
+            if (e.key.toLowerCase() === 's') keys.s = false;
+            if (e.key.toLowerCase() === 'd') keys.d = false;
+        });
+
+        animate();
+    }
+
+    function startGame() {
+        startScreen.style.display = 'none';
+        restartGame();
+    }
+
+    function restartGame() {
+        player = new Player();
+        bullets = [];
+        zombies = [];
+        particles = [];
+        score = 0;
+        scoreEl.innerText = "SCORE: 0";
+        hpBar.style.width = "100%";
+        gameState = "PLAYING";
+        gameOverScreen.style.display = 'none';
+        mouse.down = false;
+    }
+
+    function endGame() {
+        gameState = "GAMEOVER";
+        finalScoreEl.innerText = score;
+        gameOverScreen.style.display = 'block';
+    }
+
+    function drawGrid() {
+        ctx.strokeStyle = 'rgba(30, 60, 60, 0.3)';
+        ctx.lineWidth = 1;
+        const gridSize = 50;
+        
+        // 计算网格偏移以产生视差或固定感
+        const offsetX = camera.x % gridSize;
+        const offsetY = camera.y % gridSize;
+
+        for (let x = 0; x < width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        for (let y = 0; y < height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // 背景清空
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, width, height);
+
+        // 应用摄像机震动
+        ctx.save();
+        if (camera.shake > 0) {
+            camera.x = (Math.random() - 0.5) * camera.shake;
+            camera.y = (Math.random() - 0.5) * camera.shake;
+            camera.shake *= 0.9; // 震动衰减
+            if(camera.shake < 0.5) camera.shake = 0;
+        } else {
+            camera.x = 0;
+            camera.y = 0;
+        }
+        ctx.translate(camera.x, camera.y);
+
+        drawGrid();
+
+        if (gameState === "PLAYING") {
+            frames++;
+
+            // 生成僵尸
+            if (frames % 60 === 0) { // 每秒生成 (60帧)
+                // 随分数提高生成频率
+                const spawnCount = 1 + Math.floor(score / 1000);
+                for(let i=0; i<spawnCount; i++) zombies.push(new Zombie());
+            }
+
+            player.update();
+            player.draw();
+
+            // 更新粒子
+            particles.forEach((p, index) => {
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(index, 1);
+            });
+
+            // 更新子弹
+            bullets.forEach((b, bIndex) => {
+                b.update();
+                b.draw();
+
+                // 移除出界子弹
+                if (b.x < 0 || b.x > width || b.y < 0 || b.y > height) {
+                    bullets.splice(bIndex, 1);
+                    return;
+                }
+
+                // 子弹击中僵尸检测
+                zombies.forEach((z, zIndex) => {
+                    const dist = Math.hypot(b.x - z.x, b.y - z.y);
+                    if (dist < z.radius + b.radius) {
+                        // 击中特效
+                        for(let i=0; i<5; i++) {
+                            particles.push(new Particle(z.x, z.y, 3, z.color, 5));
+                        }
+                        
+                        z.hp--;
+                        bullets.splice(bIndex, 1); // 移除子弹
+
+                        if (z.hp <= 0) {
+                            // 死亡爆炸特效
+                            for(let i=0; i<15; i++) {
+                                particles.push(new Particle(z.x, z.y, 5, '#ff3333', 15)); // 血爆
+                                particles.push(new Particle(z.x, z.y, 3, '#ffffff', 10)); // 闪光
+                            }
+                            zombies.splice(zIndex, 1);
+                            score += 100;
+                            scoreEl.innerText = "SCORE: " + score;
+                            camera.shake = 5; // 击杀震动
+                        }
+                    }
+                });
+            });
+
+            // 更新僵尸
+            zombies.forEach(z => {
+                z.update();
+                z.draw();
+            });
+        } 
+        else {
+            // 在菜单或结束界面，依然渲染粒子和背景，保持动态感
+             particles.forEach((p, index) => {
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(index, 1);
+            });
+        }
+
+        ctx.restore();
+    }
+
+    init();
+
+</script>
+</body>
+</html>
